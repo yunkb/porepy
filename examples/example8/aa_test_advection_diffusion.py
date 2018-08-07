@@ -12,7 +12,7 @@ from porepy.numerics.fv import tpfa
 
 from porepy.utils.errors import error
 
-#------------------------------------------------------------------------------#
+# ------------------------------------------------------------------------------#
 
 
 def add_data(g, advection):
@@ -20,23 +20,23 @@ def add_data(g, advection):
     Define the permeability, apertures, boundary conditions
     """
 
-    b_faces = g.tags['domain_boundary_faces'].nonzero()[0]
-    bnd = bc.BoundaryCondition(g, b_faces, ['dir'] * b_faces.size)
+    b_faces = g.tags["domain_boundary_faces"].nonzero()[0]
+    bnd = bc.BoundaryCondition(g, b_faces, ["dir"] * b_faces.size)
     bnd_val = np.zeros(g.num_faces)
 
     beta_n = advection.beta_n(g, [1, 0, 0])
 
     kxx = 1e-2 * np.ones(g.num_cells)
-    diffusion = second_order_tensor.SecondOrderTensor(g.dim, kxx)
+    diffusion = second_order_tensor.SecondOrderTensorTensor(g.dim, kxx)
 
     f = np.ones(g.num_cells) * g.cell_volumes
 
-    data = {'beta_n': beta_n, 'bc': bnd, 'bc_val': bnd_val, 'k': diffusion,
-            'f': f}
+    data = {"beta_n": beta_n, "bc": bnd, "bc_val": bnd_val, "k": diffusion, "f": f}
 
     return data
 
-#------------------------------------------------------------------------------#
+
+# ------------------------------------------------------------------------------#
 
 # the f is considered twice, we guess that non-homogeneous Neumann as well.
 

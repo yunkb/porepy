@@ -11,20 +11,21 @@ import scipy.sparse as sps
 import time
 import logging
 
-from porepy.fracs import structured, simplex, split_grid, non_conforming, utils
+from porepy.fracs import structured, simplex, split_grid, non_conforming, tools
 from porepy.fracs.fractures import Intersection
 from porepy import FractureNetwork
 from porepy.fracs.fractures import FractureNetwork as FractureNetwork_full
 from porepy.grids.grid_bucket import GridBucket
+from porepy.grids import mortar_grid
 from porepy.grids.structured import TensorGrid
 from porepy.utils import mcolon
 from porepy.utils import comp_geom as cg
 
 
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 
-def simplex_grid(fracs=None, domain=None, network=None, subdomains=[], verbose=0, **kwargs):
+def simplex_grid(fracs=None, domain=None, network=None, subdomains=[], **kwargs):
     """
     Main function for grid generation. Creates a fractured simiplex grid in 2
     or 3 dimensions.
@@ -47,6 +48,23 @@ def simplex_grid(fracs=None, domain=None, network=None, subdomains=[], verbose=0
         for each fracture, same format as fracs. Specifies internal boundaries
         for the gridding. Only available in 3D.
     **kwargs: May contain fracture tags, options for gridding, etc.
+
+    Gridding options:
+    The mesh parameters are:
+        mesh_size_frac (double): Ideal mesh size. Will be added to all points
+            that are sufficiently far away from other points.
+        mesh_size_min (double): Minimal mesh size; we will make no attempts to
+            enforce even smaller mesh sizes upon Gmsh.
+        mesh_size_bound (double): Optional boundary mesh size, defaults to the
+            value of mesh_size_frac. Will be added to the points
+            defining the boundary. In 2d, this parameter dictates the size at
+            the boundary corners. In 3d, it is assigned unless there are any
+            fractures in the immediate vicinity influencing the size. In other
+            words, mesh_size_bound is the boundary point equivalent of
+            mesh_size_frac.
+
+    TODO: Update 2d implementation to adhere to 3d in
+        porepy.fracs.tools.determine_mesh_size.
 
     Returns
     -------
@@ -73,76 +91,41 @@ def simplex_grid(fracs=None, domain=None, network=None, subdomains=[], verbose=0
 
     """
     if domain is None:
+        if fracs is not None:
+            ndim = fracs[0].shape[0]
+        else:
+            ndim = network[0].p.shape[0]
+
+    elif "zmax" in domain:
         ndim = 3
-    elif 'zmax' in domain:
-        ndim = 3
-    elif 'ymax' in domain:
+    elif "ymax" in domain:
         ndim = 2
     else:
-        raise ValueError('simplex_grid only supported for 2 or 3 dimensions')
+        raise ValueError("simplex_grid only supported for 2 or 3 dimensions")
 
-    if verbose > 0:
-        print('Construct mesh')
-        tm_msh = time.time()
-        tm_tot = time.time()
-    # Call relevant method, depending on grid dimensions.
+    logger.info("Construct mesh")
+    tm_tot = time.time()
     if ndim == 2:
-        assert fracs is not None, '2d requires definition of fractures'
-        assert domain is not None, '2d requires definition of domain'
+        assert fracs is not None, "2d requires definition of fractures"
+        assert domain is not None, "2d requires definition of domain"
         # Convert the fracture to a fracture dictionary.
         if len(fracs) == 0:
             f_lines = np.zeros((2, 0))
             f_pts = np.zeros((2, 0))
         else:
-            f_lines = np.reshape(np.arange(2 * len(fracs)), (2, -1), order='F')
+            f_lines = np.reshape(np.arange(2 * len(fracs)), (2, -1), order="F")
             f_pts = np.hstack(fracs)
-        frac_dic = {'points': f_pts, 'edges': f_lines}
+        frac_dic = {"points": f_pts, "edges": f_lines}
         grids = simplex.triangle_grid(frac_dic, domain, **kwargs)
     elif ndim == 3:
-        grids = simplex.tetrahedral_grid(
-            fracs, domain, network, subdomains, **kwargs)
+        grids = simplex.tetrahedral_grid(fracs, domain, network, subdomains, **kwargs)
     else:
-        raise ValueError('Only support for 2 and 3 dimensions')
+        raise ValueError("Only support for 2 and 3 dimensions")
 
-    if verbose > 0:
-        print('Done. Elapsed time ' + str(time.time() - tm_msh))
-
-    # Tag tip faces
-    tag_faces(grids)
-
-    # Assemble grids in a bucket
-
-    if verbose > 0:
-        print('Assemble in bucket')
-        tm_bucket = time.time()
-    gb = assemble_in_bucket(grids, **kwargs)
-    if verbose > 0:
-        print('Done. Elapsed time ' + str(time.time() - tm_bucket))
-        print('Compute geometry')
-        tm_geom = time.time()
-
-    gb.compute_geometry()
-    # Split the grids.
-    if verbose > 0:
-        print('Done. Elapsed time ' + str(time.time() - tm_geom))
-        print('Split fractures')
-        tm_split = time.time()
-    split_grid.split_fractures(gb, **kwargs)
-    if verbose > 0:
-        print('Done. Elapsed time ' + str(time.time() - tm_split))
-    gb.assign_node_ordering()
-
-    if verbose > 0:
-        print('Mesh construction completed. Total time ' +
-              str(time.time() - tm_tot))
-
-    return gb
-
-#------------------------------------------------------------------------------#
+    return grid_list_to_grid_bucket(grids, time_tot=tm_tot, **kwargs)
 
 
-def dfn(fracs, conforming, intersections=None, keep_geo=False, tol=1e-4,
-        **kwargs):
+def dfn(fracs, conforming, intersections=None, keep_geo=False, tol=1e-4, **kwargs):
     """ Create a mesh of a DFN model, that is, only of fractures.
 
     The mesh can eihter be conforming along fracture intersections, or each
@@ -169,8 +152,7 @@ def dfn(fracs, conforming, intersections=None, keep_geo=False, tol=1e-4,
 
     """
 
-    if isinstance(fracs, FractureNetwork) \
-       or isinstance(fracs, FractureNetwork_full):
+    if isinstance(fracs, FractureNetwork) or isinstance(fracs, FractureNetwork_full):
         network = fracs
     else:
         network = FractureNetwork(fracs)
@@ -179,38 +161,36 @@ def dfn(fracs, conforming, intersections=None, keep_geo=False, tol=1e-4,
     # provided.
 
     if intersections is not None:
-        logger.warn('FractureNetwork use pre-computed intersections')
+        logger.warn("FractureNetwork use pre-computed intersections")
         network.intersections = [Intersection(*i) for i in intersections]
     else:
-        logger.warn('FractureNetwork find intersections in DFN')
+        logger.warn("FractureNetwork find intersections in DFN")
         tic = time.time()
         network.find_intersections()
-        logger.warn('Done. Elapsed time ' + str(time.time() - tic))
+        logger.warn("Done. Elapsed time " + str(time.time() - tic))
 
     if conforming:
-        logger.warn('Create conforming mesh for DFN network')
-        grids = simplex.triangle_grid_embedded(network, find_isect=False,
-                                               **kwargs)
+        logger.warn("Create conforming mesh for DFN network")
+        grids = simplex.triangle_grid_embedded(network, find_isect=False, **kwargs)
     else:
-        logger.warn('Create non-conforming mesh for DFN network')
+        logger.warn("Create non-conforming mesh for DFN network")
         tic = time.time()
         grid_list = []
         neigh_list = []
 
         for fi in range(len(network._fractures)):
-            logger.info('Meshing of fracture ' + str(fi))
+            logger.info("Meshing of fracture " + str(fi))
             # Rotate fracture vertexes and intersection points
             fp, ip, other_frac, rot, cp = network.fracture_to_plane(fi)
             frac_i = network[fi]
 
-            f_lines = np.reshape(np.arange(ip.shape[1]), (2, -1), order='F')
-            frac_dict = {'points': ip, 'edges': f_lines}
+            f_lines = np.reshape(np.arange(ip.shape[1]), (2, -1), order="F")
+            frac_dict = {"points": ip, "edges": f_lines}
             if keep_geo:
-                file_name = 'frac_mesh_' + str(fi)
-                kwargs['file_name'] = file_name
+                file_name = "frac_mesh_" + str(fi)
+                kwargs["file_name"] = file_name
             # Create mesh on this fracture surface.
-            grids = simplex.triangle_grid(frac_dict, fp, verbose=False,
-                                          **kwargs)
+            grids = simplex.triangle_grid(frac_dict, fp, verbose=False, **kwargs)
 
             irot = rot.T
             # Loop over grids, rotate back again to 3d coordinates
@@ -238,53 +218,44 @@ def dfn(fracs, conforming, intersections=None, keep_geo=False, tol=1e-4,
                     g_aux.global_point_ind = global_point_ind[sort_ind]
                     grids[1].insert(ind, g_aux)
 
-            assert len(grids[0]) == 1, 'Fracture should be covered by single'\
-                'mesh'
+            assert len(grids[0]) == 1, "Fracture should be covered by single" "mesh"
 
             grid_list.append(grids)
             neigh_list.append(other_frac)
 
-        logger.warn('Finished creating grids. Elapsed time ' +
-                    str(time.time() - tic))
-        logger.warn('Merge grids')
+        logger.warn("Finished creating grids. Elapsed time " + str(time.time() - tic))
+        logger.warn("Merge grids")
         tic = time.time()
         grids = non_conforming.merge_grids(grid_list, neigh_list)
-        logger.warn('Done. Elapsed time ' + str(time.time() - tic))
+        logger.warn("Done. Elapsed time " + str(time.time() - tic))
 
-        print('\n')
         for g_set in grids:
             if len(g_set) > 0:
-                s = 'Created ' + str(len(g_set)) + ' ' + str(g_set[0].dim) + \
-                    '-d grids with '
+                s = (
+                    "Created "
+                    + str(len(g_set))
+                    + " "
+                    + str(g_set[0].dim)
+                    + "-d grids with "
+                )
                 num = 0
                 for g in g_set:
                     num += g.num_cells
-                s += str(num) + ' cells'
-                print(s)
-        print('\n')
+                s += str(num) + " cells"
+                logger.info(s)
 
-    tag_faces(grids, check_highest_dim=False)
-    logger.warn('Assemble in bucket')
-    tic = time.time()
-    gb = assemble_in_bucket(grids)
-    logger.warn('Done. Elapsed time ' + str(time.time() - tic))
-    logger.warn('Compute geometry')
-    tic = time.time()
-    gb.compute_geometry()
-    logger.warn('Done. Elapsed time ' + str(time.time() - tic))
-    logger.warn('Split fractures')
-    tic = time.time()
-    split_grid.split_fractures(gb)
-    logger.warn('Done. Elapsed time ' + str(time.time() - tic))
-    return gb
+    return grid_list_to_grid_bucket(grids, check_highest_dim=False)
 
 
-#------------------------------------------------------------------------------#
+# ------------------------------------------------------------------------------#
+
 
 def from_gmsh(file_name, dim, **kwargs):
     """
     Import an already generated grid from gmsh.
     NOTE: Only 2d grid is implemented so far.
+
+    TODO: A similar function is being implemnted in the importer, use this instead.
 
     Parameters
     ----------
@@ -306,35 +277,83 @@ def from_gmsh(file_name, dim, **kwargs):
     """
     # Call relevant method, depending on grid dimensions.
     if dim == 2:
-        if file_name.endswith('.geo'):
+        if file_name.endswith(".geo"):
             simplex.triangle_grid_run_gmsh(file_name, **kwargs)
             grids = simplex.triangle_grid_from_gmsh(file_name, **kwargs)
-        elif file_name.endswith('.msh'):
+        elif file_name.endswith(".msh"):
             grids = simplex.triangle_grid_from_gmsh(file_name, **kwargs)
 
-#    elif dim == 3:
-#        grids = simplex.tetrahedral_grid_from_gmsh(file_name, **kwargs)
-#   NOTE: function simplex.tetrahedral_grid needs to be split as did for
-#   simplex.triangle_grid
+    #    elif dim == 3:
+    #        grids = simplex.tetrahedral_grid_from_gmsh(file_name, **kwargs)
+    #   NOTE: function simplex.tetrahedral_grid needs to be split as did for
+    #   simplex.triangle_grid
     else:
-        raise ValueError('Only support for 2 dimensions')
+        raise ValueError("Only support for 2 dimensions")
 
     # No fractures are specified, return a simple grid
     if len(grids[1]) == 0:
         grids[0][0].compute_geometry()
         return grids[0][0]
 
-    # Tag tip faces
-    tag_faces(grids)
+    return grid_list_to_grid_bucket(grids)
 
-    # Assemble grids in a bucket
-    gb = assemble_in_bucket(grids)
+
+# ------------------------------------------------------------------------------#
+
+
+def grid_list_to_grid_bucket(grids, time_tot=None, **kwargs):
+    """ Convert a list of grids to a full GridBucket.
+
+    The list can come from several mesh constructors, both simplex and
+    structured approaches uses this in 2D and 3D.
+
+    The function can not be used on an arbitrary set of grids; they should
+    contain information to glue grids together. This will be included for grids
+    created by the standard mixed-dimensional grid constructors. In other
+    words: Do *not* use this function directly unless you know what you are
+    doing.
+
+    Parameters:
+        grids (list of lists of grids): Grids to enter into the bucket.
+            Sorted per dimension.
+        time_tot (double, optional): Start time for full mesh construction.
+            Used for logging. Defaults to None, in which case no information
+            on total time consumption is logged.
+        **kwargs: Passed on to subfunctions.
+
+    Returns:
+        GridBucket: Final mixed-dimensional grid.
+
+    """
+    # Tag tip faces
+    check_highest_dim = kwargs.get("check_highest_dim", False)
+    _tag_faces(grids, check_highest_dim)
+
+    logger.info("Assemble in bucket")
+    tm_bucket = time.time()
+    gb = _assemble_in_bucket(grids, **kwargs)
+    logger.info("Done. Elapsed time " + str(time.time() - tm_bucket))
+
+    logger.info("Compute geometry")
+    tm_geom = time.time()
     gb.compute_geometry()
     # Split the grids.
-    split_grid.split_fractures(gb)
-    return gb
+    logger.info("Done. Elapsed time " + str(time.time() - tm_geom))
+    logger.info("Split fractures")
+    tm_split = time.time()
+    split_grid.split_fractures(gb, **kwargs)
+    logger.info("Done. Elapsed time " + str(time.time() - tm_split))
 
-#------------------------------------------------------------------------------#
+    create_mortar_grids(gb, **kwargs)
+
+    gb.assign_node_ordering()
+
+    if time_tot is not None:
+        logger.info(
+            "Mesh construction completed. Total time " + str(time.time() - time_tot)
+        )
+
+    return gb
 
 
 def cart_grid(fracs, nx, **kwargs):
@@ -377,12 +396,12 @@ def cart_grid(fracs, nx, **kwargs):
     gb = cart_grid(fracs, [5,5])
     """
     ndim = np.asarray(nx).size
-    physdims = kwargs.get('physdims', None)
+    physdims = kwargs.get("physdims", None)
 
     if physdims is None:
         physdims = nx
     elif np.asarray(physdims).size != ndim:
-        raise ValueError('Physical dimension must equal grid dimension')
+        raise ValueError("Physical dimension must equal grid dimension")
 
     # Call relevant method, depending on grid dimensions
     if ndim == 2:
@@ -390,22 +409,12 @@ def cart_grid(fracs, nx, **kwargs):
     elif ndim == 3:
         grids = structured.cart_grid_3d(fracs, nx, physdims=physdims)
     else:
-        raise ValueError('Only support for 2 and 3 dimensions')
+        raise ValueError("Only support for 2 and 3 dimensions")
 
-    # Tag tip faces.
-    tag_faces(grids)
-
-    # Asemble in bucket
-    gb = assemble_in_bucket(grids)
-    gb.compute_geometry()
-
-    # Split grid.
-    split_grid.split_fractures(gb, **kwargs)
-    gb.assign_node_ordering()
-    return gb
+    return grid_list_to_grid_bucket(grids, **kwargs)
 
 
-def tag_faces(grids, check_highest_dim=True):
+def _tag_faces(grids, check_highest_dim=True):
     """
     Tag faces of grids. Three different tags are given to different types of
     faces:
@@ -427,15 +436,13 @@ def tag_faces(grids, check_highest_dim=True):
 
     # Assume only one grid of highest dimension
     if check_highest_dim:
-        assert len(grids[0]) == 1, 'Must be exactly'\
-            '1 grid of dim: ' + str(len(grids))
+        assert len(grids[0]) == 1, "Must be exactly" "1 grid of dim: " + str(len(grids))
 
     for g_h in np.atleast_1d(grids[0]):
         bnd_faces = g_h.get_all_boundary_faces()
-        domain_boundary_tags = np.zeros(
-            g_h.num_faces, dtype=bool)
+        domain_boundary_tags = np.zeros(g_h.num_faces, dtype=bool)
         domain_boundary_tags[bnd_faces] = True
-        g_h.tags['domain_boundary_faces'] = domain_boundary_tags
+        g_h.tags["domain_boundary_faces"] = domain_boundary_tags
         bnd_nodes, _, _ = sps.find(g_h.face_nodes[:, bnd_faces])
         bnd_nodes = np.unique(bnd_nodes)
         for g_dim in grids[1:-1]:
@@ -443,8 +450,7 @@ def tag_faces(grids, check_highest_dim=True):
                 # We find the global nodes of all boundary faces
                 bnd_faces_l = g.get_all_boundary_faces()
                 indptr = g.face_nodes.indptr
-                fn_loc = mcolon.mcolon(
-                    indptr[bnd_faces_l], indptr[bnd_faces_l + 1])
+                fn_loc = mcolon.mcolon(indptr[bnd_faces_l], indptr[bnd_faces_l + 1])
                 nodes_loc = g.face_nodes.indices[fn_loc]
                 # Convert to global numbering
                 nodes_glb = g.global_point_ind[nodes_loc]
@@ -454,37 +460,39 @@ def tag_faces(grids, check_highest_dim=True):
                 # We reshape the nodes such that each column equals the nodes of
                 # one face. If a face only contains global boundary nodes, the
                 # local face is also a boundary face. Otherwise, we add a TIP tag.
-                n_per_face = nodes_per_face(g)
-                is_tip = np.any(is_tip.reshape(
-                    (n_per_face, bnd_faces_l.size), order='F'), axis=0)
+                n_per_face = _nodes_per_face(g)
+                is_tip = np.any(
+                    is_tip.reshape((n_per_face, bnd_faces_l.size), order="F"), axis=0
+                )
 
-                g.tags['tip_faces'][bnd_faces_l[is_tip]] = True
+                g.tags["tip_faces"][bnd_faces_l[is_tip]] = True
                 domain_boundary_tags = np.zeros(g.num_faces, dtype=bool)
                 domain_boundary_tags[bnd_faces_l[is_tip == False]] = True
-                g.tags['domain_boundary_faces'] = domain_boundary_tags
+                g.tags["domain_boundary_faces"] = domain_boundary_tags
 
 
-def nodes_per_face(g):
+def _nodes_per_face(g):
     """
     Returns the number of nodes per face for a given grid
     """
-    if ('TensorGrid' in g.name or 'CartGrid' in g.name) and g.dim == 3:
+    if ("TensorGrid" in g.name or "CartGrid" in g.name) and g.dim == 3:
         n_per_face = 4
-    elif 'TetrahedralGrid' in g.name:
+    elif "TetrahedralGrid" in g.name:
         n_per_face = 3
-    elif ('TensorGrid' in g.name or 'CartGrid' in g.name) and g.dim == 2:
+    elif ("TensorGrid" in g.name or "CartGrid" in g.name) and g.dim == 2:
         n_per_face = 2
-    elif 'TriangleGrid'in g.name:
+    elif "TriangleGrid" in g.name:
         n_per_face = 2
-    elif ('TensorGrid' in g.name or 'CartGrid' in g.name) and g.dim == 1:
+    elif ("TensorGrid" in g.name or "CartGrid" in g.name) and g.dim == 1:
         n_per_face = 1
     else:
         raise ValueError(
-            "Can not find number of nodes per face for grid: " + str(g.name))
+            "Can not find number of nodes per face for grid: " + str(g.name)
+        )
     return n_per_face
 
 
-def assemble_in_bucket(grids, **kwargs):
+def _assemble_in_bucket(grids, **kwargs):
     """
     Create a GridBucket from a list of grids.
     Parameters
@@ -511,22 +519,60 @@ def assemble_in_bucket(grids, **kwargs):
         for hg in grids[dim]:
             # We have to specify the number of nodes per face to generate a
             # matrix of the nodes of each face.
-            n_per_face = nodes_per_face(hg)
-            fn_loc = hg.face_nodes.indices.reshape((n_per_face, hg.num_faces),
-                                                   order='F')
+            n_per_face = _nodes_per_face(hg)
+            fn_loc = hg.face_nodes.indices.reshape(
+                (n_per_face, hg.num_faces), order="F"
+            )
             # Convert to global numbering
             fn = hg.global_point_ind[fn_loc]
             fn = np.sort(fn, axis=0)
 
             for lg in grids[dim + 1]:
-                cell_2_face, cell = utils.obtain_interdim_mappings(
-                    lg, fn, n_per_face, **kwargs)
-                face_cells = sps.csc_matrix(
-                    (np.ones(cell.size, dtype=bool), (cell, cell_2_face)),
-                    (lg.num_cells, hg.num_faces))
+                cell_2_face, cell = tools.obtain_interdim_mappings(
+                    lg, fn, n_per_face, **kwargs
+                )
+                if cell_2_face.size > 0:
+                    face_cells = sps.csc_matrix(
+                        (np.ones(cell.size, dtype=bool), (cell, cell_2_face)),
+                        (lg.num_cells, hg.num_faces),
+                    )
 
-                # This if may be unnecessary, but better safe than sorry.
-                if face_cells.size > 0:
                     bucket.add_edge([hg, lg], face_cells)
 
     return bucket
+
+
+# ------------------------------------------------------------------------------#
+
+
+def create_mortar_grids(gb, ensure_matching_face_cell=True, **kwargs):
+
+    gb.add_edge_props("mortar_grid")
+    # loop on all the nodes and create the mortar grids
+    for e, d in gb.edges():
+        lg = gb.nodes_of_edge(e)[0]
+        # d['face_cells'].indices gives mappings into the lower dimensional
+        # cells. Count the number of occurences for each cell.
+        num_sides = np.bincount(d["face_cells"].indices)
+        # Each cell should be found either twice (think a regular fracture
+        # that splits a higher dimensional mesh), or once (the lower end of
+        # a T-intersection, or both ends of an L-intersection).
+        if ensure_matching_face_cell:
+            assert np.all(num_sides == 1) or np.all(num_sides == 2)
+        else:
+            assert np.max(num_sides) < 3
+
+        # If all cells are found twice, create two mortar grids
+        if np.all(num_sides > 1):
+            # we are in a two sides situation
+            side_g = {
+                mortar_grid.LEFT_SIDE: lg.copy(),
+                mortar_grid.RIGHT_SIDE: lg.copy(),
+            }
+        else:
+            # the tag name is just a place-holder we assume left side
+            side_g = {mortar_grid.LEFT_SIDE: lg.copy()}
+        d["mortar_grid"] = mortar_grid.MortarGrid(lg.dim, side_g, d["face_cells"])
+
+
+# ------------------------------------------------------------------------------#
