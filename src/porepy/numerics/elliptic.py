@@ -35,7 +35,7 @@ class EllipticModel:
         a Parameter class should be added to each grid bucket data node with
         keyword 'param'.
     data: (dictionary) Defaults to None. Only used if gb is a Grid. Should
-          contain a Parameter class with the keyword 'Param'
+          contain a Parameter class with the keyword 'param'
     physics: (string): defaults to 'flow'
 
     Functions:
