@@ -20,7 +20,6 @@ if __name__ == "__main__":
     fluid = pp.Water(theta_ref)
     rock = pp.Granite(theta_ref)
 
-    aperture = 2*pp.MILLIMETER
     n_steps = 200
 
     mu = fluid.dynamic_viscosity()
@@ -39,7 +38,10 @@ if __name__ == "__main__":
 
             delta_x = 0.13
             bc_flow = 3 * pp.BAR
-            km = 1e-14
+
+            aperture = pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
 
             t_max = 1e3 #1e-3 * delta_x * delta_x * mu / (bc_flow * km)
 
@@ -53,6 +55,10 @@ if __name__ == "__main__":
             bc_flow = pp.BAR
             km = 1e-14
 
+            aperture = pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
+
             t_max = 1e5 #delta_x * delta_x * mu / (bc_flow * km)
 
         elif id_frac == 2:
@@ -64,6 +70,10 @@ if __name__ == "__main__":
             delta_x = 15.5
             bc_flow = 4 * pp.BAR
             km = 1e-14
+
+            aperture = 2*pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
 
             t_max = delta_x * delta_x * mu / (bc_flow * km) / 2
 
@@ -77,6 +87,10 @@ if __name__ == "__main__":
             bc_flow = pp.BAR
             km = 1e-14
 
+            aperture = 20*pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
+
             t_max = 1e4 #delta_x * delta_x * mu / (bc_flow * km)
 
         elif id_frac == 4:
@@ -88,6 +102,10 @@ if __name__ == "__main__":
             delta_x = 3160
             bc_flow = pp.BAR
             km = 1e-14
+
+            aperture = 1000*pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
 
             t_max = delta_x * delta_x * mu / (bc_flow * km)
 
@@ -101,6 +119,10 @@ if __name__ == "__main__":
             bc_flow = pp.BAR
             km = 1e-14
 
+            aperture = pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
+
             t_max = delta_x * delta_x * mu / (bc_flow * km)
 
         elif id_frac == 6:
@@ -112,6 +134,10 @@ if __name__ == "__main__":
             delta_x = 30
             bc_flow = pp.BAR
             km = 1e-14
+
+            aperture = 2*pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
 
             t_max = delta_x * delta_x * mu / (bc_flow * km)
 
@@ -125,6 +151,10 @@ if __name__ == "__main__":
             bc_flow = pp.BAR
             km = 1e-14
 
+            aperture = 20*pp.MILLIMETER
+            kf = aperture * aperture / 12
+            km = 1e-5 * kf
+
             t_max = delta_x * delta_x * mu / (bc_flow * km)
 
         mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2}
@@ -132,7 +162,7 @@ if __name__ == "__main__":
         # select the permeability depending on the selected test case
         param = {
             "aperture": aperture,
-            "kf": aperture**2 / 12,
+            "kf": kf,
             "km": km,
             "porosity_f": 0.85,
             "time_step": t_max/n_steps,
