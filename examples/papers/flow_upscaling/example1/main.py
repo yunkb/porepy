@@ -157,7 +157,7 @@ if __name__ == "__main__":
 
             t_max = delta_x * delta_x * mu / (bc_flow * km)
 
-        mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2}
+        mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2, "split_branch": h}
 
         # select the permeability depending on the selected test case
         param = {
