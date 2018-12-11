@@ -251,14 +251,32 @@ def determine_mesh_size(pts, pts_on_boundary=None, lines=None, **kwargs):
 
             dist_pts = np.r_[dist_pts, mesh_size]
             vals = np.r_[vals, mesh_size]
-            lines = np.c_[
-                lines, [seg[0], pt_id, seg[2], seg[3]], [pt_id, seg[1], seg[2], seg[3]]
-            ]
+            lines = np.c_[lines, [seg[0], pt_id, *seg[2:]], [pt_id, *seg[1:]]]
+
+    split = kwargs.get("split_branch", None)
+    new_lines = np.empty((4, 0), dtype=np.int)
+    if split is not None:
+        for seg in lines.T:
+            start = pts[:, seg[0]]
+            end = pts[:, seg[1]]
+            # do the split only for the fractures
+            if seg[2] == 3 and np.linalg.norm(start - end) < split:
+                pt_id = pts.shape[1]
+                new_lines = np.c_[new_lines, [seg[0], pt_id, *seg[2:]],
+                                             [pt_id, *seg[1:]]]
+
+                pts = np.c_[pts, 0.5*(start + end)]
+                dist_pts = np.r_[dist_pts, np.mean(dist_pts[seg[0:2]])]
+            else:
+                new_lines = np.c_[new_lines, [*seg]]
+    else:
+        new_lines = lines
+
     # Make sure no mesh size assignments are below minimum value.
     #    if val_min is not None:
     #        dist_pts[dist_pts < val_min] = val_min
 
-    return dist_pts, pts, lines
+    return dist_pts, pts, new_lines
 
 
 def obtain_interdim_mappings(
