@@ -20,7 +20,7 @@ if __name__ == "__main__":
     fluid = pp.Water(theta_ref)
     rock = pp.Granite(theta_ref)
 
-    n_steps = 200
+    n_steps = 500
 
     mu = fluid.dynamic_viscosity()
 
@@ -37,13 +37,13 @@ if __name__ == "__main__":
             folder = "algeroyna_1to1"
 
             delta_x = 0.13
-            bc_flow = 3 * pp.BAR
+            bc_flow = pp.BAR
 
             aperture = pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = 1e3 #1e-3 * delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 5 * 1e3 #1e-3 * delta_x * delta_x * mu / (bc_flow * km)
 
         elif id_frac == 1:
             h = 0.0390625
@@ -52,14 +52,13 @@ if __name__ == "__main__":
             folder = "algeroyna_1to10"
 
             delta_x = 2.8
-            bc_flow = pp.BAR
-            km = 1e-14
+            bc_flow = 5 * pp.BAR
 
             aperture = pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = 1e5 #delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 1e5
 
         elif id_frac == 2:
             h = 0.25
@@ -68,14 +67,13 @@ if __name__ == "__main__":
             folder = "algeroyna_1to100"
 
             delta_x = 15.5
-            bc_flow = 4 * pp.BAR
-            km = 1e-14
+            bc_flow = 15 * pp.BAR
 
-            aperture = 2*pp.MILLIMETER
+            aperture = 2 * pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = delta_x * delta_x * mu / (bc_flow * km) / 2
+            t_max = 1e6
 
         elif id_frac == 3:
             h = 5
@@ -84,14 +82,13 @@ if __name__ == "__main__":
             folder = "algeroyna_1to1000"
 
             delta_x = 245
-            bc_flow = pp.BAR
-            km = 1e-14
+            bc_flow = 20 * pp.BAR
 
-            aperture = 20*pp.MILLIMETER
+            aperture = 20 * pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = 1e4 #delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 1e7
 
         elif id_frac == 4:
             h = 30
@@ -100,14 +97,13 @@ if __name__ == "__main__":
             folder = "algeroyna_1to10000"
 
             delta_x = 3160
-            bc_flow = pp.BAR
-            km = 1e-14
+            bc_flow = 50 * pp.BAR
 
-            aperture = 1000*pp.MILLIMETER
+            aperture = 100 * pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 1e8
 
         elif id_frac == 5:
             h = 0.75*1e-1
@@ -116,14 +112,14 @@ if __name__ == "__main__":
             folder = "vikso_1to10"
 
             delta_x = 4
-            bc_flow = pp.BAR
+            bc_flow = 5 * pp.BAR
             km = 1e-14
 
             aperture = pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 1e5
 
         elif id_frac == 6:
             h = 0.375
@@ -132,14 +128,13 @@ if __name__ == "__main__":
             folder = "vikso_1to100"
 
             delta_x = 30
-            bc_flow = pp.BAR
-            km = 1e-14
+            bc_flow = 15 * pp.BAR
 
-            aperture = 2*pp.MILLIMETER
+            aperture = 2 * pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 1e6
 
         elif id_frac == 7:
             h = 2.5
@@ -148,16 +143,15 @@ if __name__ == "__main__":
             folder = "vikso_1to1000"
 
             delta_x = 295
-            bc_flow = pp.BAR
-            km = 1e-14
+            bc_flow = 20 * pp.BAR
 
-            aperture = 20*pp.MILLIMETER
+            aperture = 20 * pp.MILLIMETER
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 1e7
 
-        mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2, "split_branch": h}
+        mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2, "split_branch": h*100}
 
         # select the permeability depending on the selected test case
         param = {
