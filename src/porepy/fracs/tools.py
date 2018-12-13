@@ -51,22 +51,23 @@ def determine_mesh_size(pts, pts_on_boundary=None, lines=None, **kwargs):
         for seg in lines.T:
             # do the split only for the fractures
             if seg[2] == 3:
-                start = pts[:, seg[0]].reshape((2, -1))
-                end = pts[:, seg[1]].reshape((2, -1))
-                eps = np.linspace(0., 1., split+2)[1:-1]
-
                 pt_id = pts.shape[1] + np.arange(split)
                 # generate the sequence of the internal points
                 loc_lines = [[pt_id[i], pt_id[i+1], *seg[2:]] for i in np.arange(split-1)]
+                loc_lines = np.array(loc_lines, dtype=np.int).T.reshape((4, -1))
 
                 # add the lines, by consider the new points
                 new_lines = np.c_[new_lines,
                                  [seg[0], pt_id[0], *seg[2:]],
-                                 np.array(loc_lines).T,
+                                 loc_lines,
                                  [pt_id[-1], *seg[1:]]]
 
                 # consider a convex combination of start and end points to
                 # generate the internal points
+                start = pts[:, seg[0]].reshape((2, -1))
+                end = pts[:, seg[1]].reshape((2, -1))
+                eps = np.linspace(0., 1., split+2)[1:-1]
+
                 pts = np.c_[pts, (1.-eps) * start + eps * end]
             else:
                 new_lines = np.c_[new_lines, [*seg]]
