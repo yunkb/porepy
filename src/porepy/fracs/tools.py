@@ -33,21 +33,53 @@ def determine_mesh_size(pts, pts_on_boundary=None, lines=None, **kwargs):
             even smaller mesh sizes upon Gmsh.
         mesh_size_bound: Boundary mesh size. Will be added to the points
             defining the boundary. If included, pts_on_boundary is mandatory.
+        split_branch: In the beginning of the algorithm split the fracture
+            branches in a number of parts defined by the split_branch.
 
     See the gmsh manual for further details.
 
     """
-    num_pts = pts.shape[1]
     val = kwargs.get("mesh_size_frac", 1)
     val_bound = kwargs.get("mesh_size_bound", None)
     val_min = kwargs.get("mesh_size_min", None)
     tol = kwargs.get("tol", 1e-5)
+
+    # defines how many times a branch should be divided
+    split = kwargs.get("split_branch", 0)
+    if split:
+        new_lines = np.empty((4, 0), dtype=np.int)
+        for seg in lines.T:
+            # do the split only for the fractures
+            if seg[2] == 3:
+                start = pts[:, seg[0]].reshape((2, -1))
+                end = pts[:, seg[1]].reshape((2, -1))
+                eps = np.linspace(0., 1., split+2)[1:-1]
+
+                pt_id = pts.shape[1] + np.arange(split)
+                # generate the sequence of the internal points
+                loc_lines = [[pt_id[i], pt_id[i+1], *seg[2:]] for i in np.arange(split-1)]
+
+                # add the lines, by consider the new points
+                new_lines = np.c_[new_lines,
+                                 [seg[0], pt_id[0], *seg[2:]],
+                                 np.array(loc_lines).T,
+                                 [pt_id[-1], *seg[1:]]]
+
+                # consider a convex combination of start and end points to
+                # generate the internal points
+                pts = np.c_[pts, (1.-eps) * start + eps * end]
+            else:
+                new_lines = np.c_[new_lines, [*seg]]
+        lines = new_lines.copy()
+
     # One value for each point to distinguish betwee val and val_bound.
+    num_pts = pts.shape[1]
     vals = val * np.ones(num_pts)
     if val_bound is not None:
         vals[pts_on_boundary] = val_bound
     if val_min is None:
         val_min = 1e-8 * val
+
     # Compute the lenght of each pair of points (fractures + domain boundary)
     pts_id = lines[:2, :]
     dist = np.linalg.norm(pts[:, pts_id[0, :]] - pts[:, pts_id[1, :]], axis=0)
@@ -252,25 +284,6 @@ def determine_mesh_size(pts, pts_on_boundary=None, lines=None, **kwargs):
             dist_pts = np.r_[dist_pts, mesh_size]
             vals = np.r_[vals, mesh_size]
             lines = np.c_[lines, [seg[0], pt_id, *seg[2:]], [pt_id, *seg[1:]]]
-
-    split = kwargs.get("split_branch", None)
-    new_lines = np.empty((4, 0), dtype=np.int)
-    if split is not None:
-        for seg in lines.T:
-            start = pts[:, seg[0]]
-            end = pts[:, seg[1]]
-            # do the split only for the fractures
-            if seg[2] == 3 and np.linalg.norm(start - end) < split:
-                pt_id = pts.shape[1]
-                new_lines = np.c_[new_lines, [seg[0], pt_id, *seg[2:]],
-                                             [pt_id, *seg[1:]]]
-
-                pts = np.c_[pts, 0.5*(start + end)]
-                dist_pts = np.r_[dist_pts, np.mean(dist_pts[seg[0:2]])]
-            else:
-                new_lines = np.c_[new_lines, [*seg]]
-    else:
-        new_lines = lines
 
     # Make sure no mesh size assignments are below minimum value.
     #    if val_min is not None:
