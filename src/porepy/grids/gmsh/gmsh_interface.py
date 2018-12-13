@@ -142,6 +142,13 @@ class GmshWriter(object):
                     + str(seg_id)
                     + "} In Surface{domain_surf};\n"
                 )
+
+#                s += "Point{p" + str(int(lines[0, mask])) + "} " +\
+#                     "In Surface{domain_surf};\n"
+#
+#                s += "Point{p" + str(int(lines[1, mask])) + "} " +\
+#                     "In Surface{domain_surf};\n"
+
                 local_seg_id += name + str(seg_id) + ", "
                 seg_id += 1
 
