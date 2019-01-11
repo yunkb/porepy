@@ -95,6 +95,108 @@ def flow(gb, param):
 
 # ------------------------------------------------------------------------------#
 
+def adv(gb, param, model_flow):
+
+    model = "transport"
+
+    model_data = data.adv(gb, model, model_flow, param)
+
+    # discretization operator name
+    adv_id = "advection"
+
+    # variable names
+    variable = "scalar"
+    mortar = "lambda_" + variable
+
+    # save variable name for the post-process
+    param["scalar"] = variable
+
+    # discretization operatr
+    discr = pp.Upwind(model_data)
+    coupling = pp.UpwindCoupling(model_data)
+
+    for g, d in gb:
+        d[pp.PRIMARY_VARIABLES] = {variable: {"cells": 1}}
+        d[pp.DISCRETIZATION] = {variable: {adv_id: discr}}
+
+    for e, d in gb.edges():
+        g_slave, g_master = gb.nodes_of_edge(e)
+        d[pp.PRIMARY_VARIABLES] = {mortar: {"cells": 1}}
+
+        d[pp.COUPLING_DISCRETIZATION] = {
+                adv_id: {
+                    g_slave: (variable, adv_id),
+                    g_master: (variable, adv_id),
+                    e: (mortar, coupling)
+                }
+            }
+
+    # setup the advection problem
+    assembler = pp.Assembler()
+    logger.info("Assemble the advective term of the transport problem")
+    A, b, block_dof, full_dof = assembler.assemble_matrix_rhs(gb)
+    logger.info("done")
+
+    # mass term
+    mass_id = "mass"
+    discr_mass = pp.MassMatrix(model_data)
+
+    for g, d in gb:
+        d[pp.PRIMARY_VARIABLES] = {variable: {"cells": 1}}
+        d[pp.DISCRETIZATION] = {variable: {mass_id: discr_mass}}
+
+    gb.remove_edge_props(pp.COUPLING_DISCRETIZATION)
+
+    for e, d in gb.edges():
+        g_slave, g_master = gb.nodes_of_edge(e)
+        d[pp.PRIMARY_VARIABLES] = {mortar: {"cells": 1}}
+
+    logger.info("Assemble the mass term of the transport problem")
+    M, _, _, _ = assembler.assemble_matrix_rhs(gb)
+    logger.info("done")
+
+    # Perform an LU factorization to speedup the solver
+    #IE_solver = sps.linalg.factorized((M + A).tocsc())
+
+    # time loop
+    logger.info("Prepare the exporting")
+    save = pp.Exporter(gb, "solution", folder=param["folder"])
+    logger.info("done")
+    variables = [variable, param["pressure"], param["P0_flux"]]
+
+    x = np.ones(A.shape[0]) * param["initial_adv"]
+    outflow = np.zeros(param["n_steps"])
+
+    logger.info("Start the time loop with " + str(param["n_steps"]) + " steps")
+    for i in np.arange(param["n_steps"]):
+        #x = IE_solver(b + M.dot(x))
+        logger.info("Solve the linear system for time step " + str(i))
+        x = sps.linalg.spsolve(M + A, b + M.dot(x))
+        logger.info("done")
+
+        logger.info("Variable post-process")
+        assembler.distribute_variable(gb, x, block_dof, full_dof)
+        logger.info("done")
+
+        logger.info("Export variable")
+        save.write_vtk(variables, time_step=i)
+        logger.info("done")
+
+        logger.info("Compute the production")
+        outflow[i] = compute_outflow(gb, param)
+        logger.info("done")
+
+    time = np.arange(param["n_steps"])*param["time_step"]
+    save.write_pvd(time)
+
+    logger.info("Save outflow on file")
+    file_out = param["folder"] + "/outflow.csv"
+    outflow = np.vstack((time, outflow)).T
+    np.savetxt(file_out, outflow, delimiter=',')
+    logger.info("done")
+
+# ------------------------------------------------------------------------------#
+
 def advdiff(gb, param, model_flow):
 
     model = "transport"

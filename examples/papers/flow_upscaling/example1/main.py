@@ -12,7 +12,7 @@ def main(file_geo, param, mesh_args, tol):
     # solve the pressure problem
     model_flow = solvers.flow(gb, param)
 
-    solvers.advdiff(gb, param, model_flow)
+    solvers.adv(gb, param, model_flow)
 
 if __name__ == "__main__":
 
@@ -43,7 +43,7 @@ if __name__ == "__main__":
             kf = aperture * aperture / 12
             km = 1e-5 * kf
 
-            t_max = 5 * 1e3 #1e-3 * delta_x * delta_x * mu / (bc_flow * km)
+            t_max = 5 * 1e3
 
         elif id_frac == 1:
             h = 0.0390625
@@ -151,7 +151,8 @@ if __name__ == "__main__":
 
             t_max = 1e7
 
-        mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2, "split_branch": h*100}
+        # split_branch is 1
+        mesh_args = {'mesh_size_frac': h, "mesh_size_min": h/2, "split_branch": 1}
 
         # select the permeability depending on the selected test case
         param = {
@@ -166,8 +167,8 @@ if __name__ == "__main__":
             "tol": tol["geo"],
             "folder": folder,
             "bc_flow": bc_flow,
-            "initial_advdiff": theta_ref,
-            "bc_advdiff": 20 * pp.CELSIUS
+            "initial_adv": theta_ref,
+            "bc_adv": 20 * pp.CELSIUS
         }
 
         main(file_geo, param, mesh_args, tol)

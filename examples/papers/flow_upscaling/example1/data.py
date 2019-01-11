@@ -67,6 +67,85 @@ def flow(gb, model, data):
 
 # ------------------------------------------------------------------------------#
 
+def adv(gb, model, model_flow, data):
+    tol = data["tol"]
+
+    model_data = model + "_data"
+
+    cm = data["rock"].specific_heat_capacity()
+    cw = data["fluid"].specific_heat_capacity()
+
+    rhom = data["rock"].DENSITY
+    rhow = data["fluid"].density()
+
+    flux_discharge_name = data["flux"]
+    flux_mortar_name = data["mortar_flux"]
+
+    for g, d in gb:
+        param = {}
+
+        unity = np.ones(g.num_cells)
+        zeros = np.zeros(g.num_cells)
+        empty = np.empty(0)
+
+        # Assign the porosity
+        if g.dim == 2:
+            phi = data["rock"].POROSITY
+        else:
+            phi = data["porosity_f"]
+
+        ce = phi * rhow * cw + (1-phi) * rhom * cm
+        param["mass_weight"] = ce
+
+        # Assign apertures
+        param["aperture"] = d[pp.PARAMETERS][model_flow]["aperture"]
+
+        # Flux
+        param[flux_discharge_name] = rhow * cw * d[flux_discharge_name]
+
+        # Boundaries
+        b_faces = g.tags["domain_boundary_faces"].nonzero()[0]
+        bc_val = np.zeros(g.num_faces)
+        if b_faces.size:
+            (top, bottom, left, right), boundary = bc_flag(g, data["domain"], tol)
+
+            labels = np.array(["neu"] * b_faces.size)
+            labels[left + right] = ["dir"]
+
+            param["bc"] = pp.BoundaryCondition(g, b_faces, labels)
+
+            bc_val[b_faces[right]] = data["bc_adv"]
+        else:
+            param["bc"] = pp.BoundaryCondition(g, np.empty(0), np.empty(0))
+
+        param["bc_values"] = bc_val
+
+        # Assign time step
+        param["time_step"] = data["time_step"]
+
+        param = pp.Parameters(g, model_data, param)
+        d[pp.PARAMETERS] = param
+        d[pp.DISCRETIZATION_MATRICES] = {model_data: {}}
+
+    # Assign coupling discharge and diffusivity
+    for e, d in gb.edges():
+        param = {}
+
+        param[flux_discharge_name] = d[flux_mortar_name] * rhow * cw
+
+        g_l = gb.nodes_of_edge(e)[0]
+        mg = d["mortar_grid"]
+        check_P = mg.slave_to_mortar_avg()
+
+        param = pp.Parameters(e, model_data, param)
+        d[pp.PARAMETERS] = param
+        d[pp.DISCRETIZATION_MATRICES] = {model_data: {}}
+
+    return model_data
+
+
+# ------------------------------------------------------------------------------#
+
 def advdiff(gb, model, model_flow, data):
     tol = data["tol"]
 
