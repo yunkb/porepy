@@ -4,7 +4,6 @@ import io
 import os
 import sys
 from shutil import rmtree
-import os.system
 from glob import glob
 from os.path import basename, splitext
 
