@@ -25,4 +25,3 @@ dependencies:
     - pytest-cov == 2.6.1
     - pytest-runner == 4.4
     - numba == 0.47
-    - git+https://github.com/pmgbergen/porepy.git@develop
