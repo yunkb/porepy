@@ -2,7 +2,7 @@
 [![DOI](https://zenodo.org/badge/89228838.svg)](https://zenodo.org/badge/latestdoi/89228838)
 [![License: GPL v3](https://img.shields.io/badge/License-GPL%20v3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![Code style](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/ambv/black)
-[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/yunkb/porepy/master)
+[![Binder](https://mybinder.org/badge_logo.svg)](https://mybinder.org/v2/gh/yunkb/porepy/develop)
 # PorePy: A Simulation Tool for Fractured and Deformable Porous Media written in Python.
 PorePy currently has the following distinguishing features:
 - General grids in 2d and 3d, as well as mixed-dimensional grids defined by intersecting fracture networks.
