@@ -2,15 +2,14 @@ name: porepy
 channels:
   - conda-forge
 dependencies:
-  - jupyter=1.0.0
+  - jupyter = 1.0.0
   - vtk
   - gmsh
   - python
+  - shapely = 1.6.4.post2
   - pip
   - pip:
     - meshio==2.3.8
-    - shapely==1.6.4.post2
-    - shapely[vectorized]==1.6.4.post2
     - networkx == 2.3
     - numpy == 1.16.3
     - scipy == 1.2.1
@@ -19,8 +18,6 @@ dependencies:
     - cython == 0.29.7;platform_system=="Linux"
     - future == 0.17.1
     - six == 1.12.0
-    - shapely == 1.6.4.post2
-    - shapely[vectorized] == 1.6.4.post2
     - pytest == 4.5.0
     - pytest-cov == 2.6.1
     - pytest-runner == 4.4
