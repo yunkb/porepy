@@ -22,5 +22,5 @@ dependencies:
     - pytest-cov == 2.6.1
     - pytest-runner == 4.4
     - numba == 0.47
-    - shapely = 1.6.4.post2
+    - shapely == 1.6.4.post2
     
