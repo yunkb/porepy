@@ -6,7 +6,7 @@ dependencies:
   - vtk
   - gmsh
   - python
-  - shapely = 1.6.4.post2
+  - geos
   - pip
   - pip:
     - meshio==2.3.8
@@ -22,3 +22,5 @@ dependencies:
     - pytest-cov == 2.6.1
     - pytest-runner == 4.4
     - numba == 0.47
+    - shapely = 1.6.4.post2
+    
